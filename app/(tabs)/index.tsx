@@ -154,14 +154,23 @@ export default function Home() {
     setPlacing(true);
     const scheduledFor =
       schedule === 'later' ? new Date(Date.now() + 2 * 60 * 60 * 1000).toISOString() : null;
-    const order = await placeOrder({
-      washType: { id: selectedWash.id, name: selectedWash.name, priceEgp: selectedWash.priceEgp },
-      location,
-      scheduledFor,
-      paymentMethod,
-    });
-    setPlacing(false);
-    if (order) router.push(`/order/${order.id}`);
+    try {
+      const order = await placeOrder({
+        washType: { id: selectedWash.id, name: selectedWash.name, priceEgp: selectedWash.priceEgp },
+        location,
+        scheduledFor,
+        paymentMethod,
+      });
+      if (order) router.push(`/order/${order.id}`);
+    } catch (e) {
+      const message = e instanceof Error ? e.message : '';
+      showAlert(
+        message.toLowerCase().includes('insufficient') ? t('home.payWithWalletInsufficient') : t('wallet.topUpError'),
+        message.toLowerCase().includes('insufficient') ? '' : message,
+      );
+    } finally {
+      setPlacing(false);
+    }
   };
 
   const dashboardWidgets = (

@@ -10,8 +10,11 @@
 //    not add a withdrawal flow without owner approval.
 //  - The DB trigger (apply_wallet_transaction) keeps balances
 //    consistent atomically — we never UPDATE wallets directly.
+//  - Clients cannot write wallets or wallet_transactions at all (see
+//    migration 0006). Every money movement goes through a SECURITY
+//    DEFINER function (wallet_topup_mock, place_order_with_wallet) or the
+//    service role (payment webhook, refunds/cancellation fees).
 import { getSupabaseClient } from '@/template';
-import { APP_CONFIG } from '@/constants/config';
 import { paymentGateway } from './paymentGateway';
 import type { Wallet, WalletTransaction, WalletTxType } from './types';
 
@@ -108,80 +111,16 @@ export async function topUpWallet(params: {
   if (!result.success) return { success: false, error: result.error };
 
   if (result.mode === 'instant') {
-    // Mock gateway: insert transaction directly — trigger updates balance.
-    const { error } = await supabase.from('wallet_transactions').insert({
-      user_id: userId,
-      type: 'topup',
-      amount_piastres: toPiastres(amountEgp),
-      note: `Top-up ${amountEgp} ${APP_CONFIG.currency}`,
+    // Mock gateway: staging-only RPC, gated by platform_settings
+    // 'payments.mock_topup_enabled' (off by default). It credits the
+    // ledger server-side; the trigger updates the balance.
+    const { data, error } = await supabase.rpc('wallet_topup_mock', {
+      p_amount_piastres: toPiastres(amountEgp),
     });
     if (error) return { success: false, error: error.message };
-    const newBalance = await getWalletBalance(userId);
-    return { success: true, mode: 'instant', newBalanceEgp: newBalance };
+    return { success: true, mode: 'instant', newBalanceEgp: toEgp(Number(data ?? 0)) };
   }
 
   // Paymob: webhook will insert the transaction after payment confirmation.
   return { success: true, mode: 'checkout', checkoutUrl: result.checkoutUrl, paymentId: result.paymentId };
-}
-
-export type WalletPayResult =
-  | { success: true }
-  | { success: false; error: string };
-
-/**
- * Deduct `amountEgp` from the wallet for a wash order.
- * The DB trigger (apply_wallet_transaction, fixed by Claude while
- * reviewing this migration) locks the wallet row and RAISE EXCEPTIONs
- * if the debit would take the balance below 0 — that's the real safety
- * net, enforced no matter what calls this. The balance check below is
- * just a fast client-side rejection so the user gets an instant, friendly
- * error instead of waiting on a round-trip that's going to fail anyway.
- * Call this AFTER the order is created to keep the order_id reference intact.
- */
-export async function payWithWallet(params: {
-  userId: string;
-  orderId: string;
-  amountEgp: number;
-}): Promise<WalletPayResult> {
-  const { userId, orderId, amountEgp } = params;
-
-  const balance = await getWalletBalance(userId);
-  if (balance < amountEgp) {
-    return { success: false, error: 'Insufficient wallet balance.' };
-  }
-
-  const { error } = await supabase.from('wallet_transactions').insert({
-    user_id: userId,
-    type: 'order_debit',
-    amount_piastres: toPiastres(amountEgp),
-    order_id: orderId,
-    note: `Order payment ${amountEgp} ${APP_CONFIG.currency}`,
-  });
-  if (error) {
-    // The DB trigger raises this if a race condition let two debits
-    // through the client-side check at once — rare, but handle it.
-    if (error.message?.toLowerCase().includes('insufficient wallet balance')) {
-      return { success: false, error: 'Insufficient wallet balance.' };
-    }
-    return { success: false, error: error.message };
-  }
-  return { success: true };
-}
-
-/** Refund amountEgp back to the wallet (e.g. cancelled order). */
-export async function refundToWallet(params: {
-  userId: string;
-  orderId: string;
-  amountEgp: number;
-  note?: string;
-}): Promise<WalletPayResult> {
-  const { error } = await supabase.from('wallet_transactions').insert({
-    user_id: params.userId,
-    type: 'refund',
-    amount_piastres: toPiastres(params.amountEgp),
-    order_id: params.orderId,
-    note: params.note ?? `Refund ${params.amountEgp} ${APP_CONFIG.currency}`,
-  });
-  if (error) return { success: false, error: error.message };
-  return { success: true };
 }
