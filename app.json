@@ -1,0 +1,62 @@
+﻿{
+    "expo":  {
+                 "name":  "onspace-app",
+                 "slug":  "onspace-app",
+                 "version":  "1.0.0",
+                 "orientation":  "portrait",
+                 "icon":  "./assets/images/logo.png",
+                 "scheme":  "onspaceapp",
+                 "userInterfaceStyle":  "automatic",
+                 "newArchEnabled":  false,
+                 "ios":  {
+                             "supportsTablet":  true,
+                             "infoPlist":  {
+                                               "NSLocationWhenInUseUsageDescription":  "SplashGo uses your location to find your car and to show workers arriving to wash it."
+                                           }
+                         },
+                 "android":  {
+                                 "package":  "com.youssefadel.carwasher",
+                                 "adaptiveIcon":  {
+                                                      "foregroundImage":  "./assets/images/logo.png",
+                                                      "backgroundColor":  "#ffffff"
+                                                  },
+                                 "edgeToEdgeEnabled":  false,
+                                 "permissions":  [
+                                                     "ACCESS_FINE_LOCATION",
+                                                     "ACCESS_COARSE_LOCATION"
+                                                 ],
+                                 "config":  {
+                                                "googleMaps":  {
+                                                                   "apiKey":  "AIzaSyBHMEv-8P0aCjANrEkkwXhc1B-qpNwSgjc"
+                                                               }
+                                            }
+                             },
+                 "web":  {
+                             "bundler":  "metro",
+                             "output":  "static",
+                             "favicon":  "./assets/images/logo.png"
+                         },
+                 "plugins":  [
+                                 "expo-router",
+                                 [
+                                     "expo-splash-screen",
+                                     {
+                                         "image":  "./assets/images/logo.png",
+                                         "imageWidth":  200,
+                                         "resizeMode":  "contain",
+                                         "backgroundColor":  "#ffffff"
+                                     }
+                                 ],
+                                 "expo-web-browser",
+                                 [
+                                     "expo-location",
+                                     {
+                                         "locationWhenInUsePermission":  "SplashGo uses your location to find your car and to show workers arriving to wash it."
+                                     }
+                                 ]
+                             ],
+                 "experiments":  {
+                                     "typedRoutes":  true
+                                 }
+             }
+}
