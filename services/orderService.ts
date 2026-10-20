@@ -106,6 +106,28 @@ export async function createOrder(params: {
   return mapOrderRow(data);
 }
 
+/** Creates the order AND debits the wallet in one database transaction
+ * (RPC place_order_with_wallet). The price is read from wash_types on the
+ * server, so the client-sent price is ignored; if the balance is too low
+ * nothing is created and the error message contains "insufficient". */
+export async function placeOrderWithWallet(params: {
+  tenantId: string;
+  washType: { id: string };
+  location: GeoLocation;
+  scheduledFor: string | null;
+}): Promise<Order> {
+  const { data, error } = await supabase.rpc('place_order_with_wallet', {
+    p_tenant_id: params.tenantId,
+    p_wash_type_id: params.washType.id,
+    p_lat: params.location.latitude,
+    p_lng: params.location.longitude,
+    p_address: params.location.address,
+    p_scheduled_for: params.scheduledFor,
+  });
+  if (error) throw new Error(error.message);
+  return mapOrderRow(data);
+}
+
 export async function updateOrderStatus(
   id: string,
   status: OrderStatus,

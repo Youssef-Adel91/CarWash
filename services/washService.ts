@@ -63,11 +63,19 @@ function mapRow(row: any): WashType {
 
 export async function fetchWashTypes(tenantId?: string): Promise<WashType[]> {
   try {
-    let query = getSupabaseClient().from('wash_types').select('*').eq('is_active', true);
-    query = tenantId ? query.eq('tenant_id', tenantId) : query.is('tenant_id', null);
-    const { data, error } = await query.order('sort_order', { ascending: true });
-    if (error || !data || data.length === 0) return WASH_TYPES;
-    return data.map(mapRow);
+    const supabase = getSupabaseClient();
+    const load = async (forTenant: string | null) => {
+      const base = supabase.from('wash_types').select('*').eq('is_active', true);
+      const query = forTenant ? base.eq('tenant_id', forTenant) : base.is('tenant_id', null);
+      const { data, error } = await query.order('sort_order', { ascending: true });
+      return error || !data ? [] : data;
+    };
+    // The tenant's own services first, then the shared catalog (real rows
+    // the server can price orders from), and only then the static list.
+    const own = tenantId ? await load(tenantId) : [];
+    if (own.length > 0) return own.map(mapRow);
+    const shared = await load(null);
+    return shared.length > 0 ? shared.map(mapRow) : WASH_TYPES;
   } catch {
     return WASH_TYPES;
   }

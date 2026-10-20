@@ -8,7 +8,6 @@ import { useAuth } from '@/hooks/useAuth';
 import { useTenant } from './TenantContext';
 import * as orderService from '@/services/orderService';
 import { recordPayment } from '@/services/paymentService';
-import { payWithWallet } from '@/services/walletService';
 import { getSupabaseClient } from '@/template';
 import type { GeoLocation, Order } from '@/services/types';
 
@@ -80,21 +79,23 @@ export function OrderProvider({ children }: { children: ReactNode }) {
   const placeOrder = useCallback(
     async (params: PlaceParams) => {
       if (!user || !selectedTenant) return null;
-      const order = await orderService.createOrder({
-        customerId: user.id,
-        tenantId: selectedTenant.id,
-        washType: params.washType,
-        location: params.location,
-        scheduledFor: params.scheduledFor,
-      });
-
+      let order: Order;
       if (params.paymentMethod === 'wallet') {
-        await payWithWallet({
-          userId: user.id,
-          orderId: order.id,
-          amountEgp: order.priceEgp,
+        // One DB transaction: order + wallet debit, or nothing.
+        order = await orderService.placeOrderWithWallet({
+          tenantId: selectedTenant.id,
+          washType: params.washType,
+          location: params.location,
+          scheduledFor: params.scheduledFor,
         });
       } else {
+        order = await orderService.createOrder({
+          customerId: user.id,
+          tenantId: selectedTenant.id,
+          washType: params.washType,
+          location: params.location,
+          scheduledFor: params.scheduledFor,
+        });
         await recordPayment({
           userId: user.id,
           tenantId: selectedTenant.id,
